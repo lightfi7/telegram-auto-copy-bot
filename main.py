@@ -1,13 +1,14 @@
 import os
-import payment
 import logging
 import pymongo
 from typing import Optional, Tuple
 
+import requests
 from Crypto import Random
 from Crypto.Cipher import AES
 from dotenv import load_dotenv
-from telegram import ChatMember, ChatMemberUpdated, Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import ChatMember, ChatMemberUpdated, Update, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice, \
+    ShippingOption
 from telegram.constants import ParseMode
 from telegram.ext import (
     Application,
@@ -23,6 +24,8 @@ BOT_TOKEN = os.getenv('BOT_TOKEN')
 
 # Replace 'SOURCE_CHANNEL_ID' with the ID of the channel you want to copy messages from
 SOURCE_CHANNEL_ID = os.getenv('SOURCE_CHANNEL_ID')
+
+PAYMENT_PROVIDER_TOKEN = os.getenv('PAYMENT_PROVIDER_TOKEN')
 
 print(BOT_TOKEN)
 
@@ -42,7 +45,12 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 # constant
-LANGUAGES = [['English', 'Spanish'], ['French', 'Korean']]
+LANGUAGES = [['English 🇺🇸', 'Spanish 🇪🇸'], ['French 🇫🇷', 'Portuguese 🇵🇹']]
+OPTIONS = [
+    [{'label': '🙍‍♂️ Account Type', 'value': 'account#type'},
+     {'label': '🛒 Trading Amount', 'value': 'trading#amount'}],
+    [{'label': '💎 Strategy', 'value': 'strategy'},
+     {'label': '⚖ Martin gale', 'value': 'martin#gale'}]]
 
 # db
 client = pymongo.MongoClient("mongodb://127.0.0.1:27017/")
@@ -98,6 +106,15 @@ def cached(key, data):
         return cache[key]
 
 
+def init_cache():
+    users = find_many('users', {})
+    for user in users:
+        _user = {}
+        for _key in user:
+            _user[_key] = user[_key]
+        cache[user['id']] = _user
+
+
 def is_hex(s):
     try:
         bytes.fromhex(s)
@@ -124,18 +141,37 @@ async def start_command(update: Update, context: CallbackContext) -> None:
                       'id': update.message.from_user.id,
                       'username': update.message.from_user.username,
                       'lang': 'English',
+                      'req': None, 'config': {}, 'perm': None
                   })
 
+    print(user)
+
     msg = (
-        "✨ Welcome!\n"
+        "✨ Welcome!\n "
         "🌐 Please select your preferred language:"
     )
 
-    keyboard = [[InlineKeyboardButton(lang, callback_data=f'@LANG_{lang}') for lang in langs] for langs in LANGUAGES]
+    keyboard = [[InlineKeyboardButton(lang, callback_data=f'@LANG_{lang}') for lang in langs] for langs in
+                LANGUAGES]
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(msg, reply_markup=reply_markup)
+
+
+async def config_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    keyboard = [[InlineKeyboardButton(opt['label'], callback_data=f'@OPTION_{opt['value']}') for opt in opts] for opts
+                in
+                OPTIONS]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text('⚙ Configuration', reply_markup=reply_markup)
+    pass
+
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text(f'🔥 @Support team\n`ry.mc.le.92@gmail.com`', parse_mode=ParseMode.MARKDOWN)
 
 
 async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -146,14 +182,15 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
     callback_type = query.data.split('_')[0]
     callback_data = query.data.split('_')[1]
 
-    if callback_type == '@LANG':
-        user = cached(query.from_user.id,
-                      {
-                          'id': query.from_user.id,
-                          'username': query.from_user.username,
-                          'lang': 'English',
-                      })
+    user = cached(query.from_user.id,
+                  {
+                      'id': query.from_user.id,
+                      'username': query.from_user.username,
+                      'lang': 'English',
+                      'config': {}
+                  })
 
+    if callback_type == '@LANG':
         user['lang'] = callback_data
         user['perm'] = 'guest'
 
@@ -163,16 +200,101 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
                        'lang': callback_data,
                        'perm': 'guest'
                    })
+        user['req'] = '@req_token'
+        if 'perm' in user and user['perm'] == 'user':
+            msg = (
+                f'🌐 Selected language: {callback_data}\n\n'
+            )
+            await update.message.reply_text(msg)
 
-        await query.edit_message_text(text=f'🌐 Selected language: {callback_data}\n\n'
-                                           f'🎁 Use the /membership command to upgrade your membership.')
+        else:
+            await query.edit_message_text(text=f'🌐 Selected language: {callback_data}\n\n'
+                                               f'📌 Enter your token after upgrade membership to start the bot\n\n'
+                                               f'🎁 Use the /membership command to upgrade your membership.',
+                                          parse_mode=ParseMode.HTML)
 
+    if callback_type == '@OPTION':
+        print(callback_data)
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(f'📌 @Support team\n`ry.mc.le.92@gmail.com`', parse_mode=ParseMode.MARKDOWN)
+        if callback_data == 'account#type':
+            keyboard = [[InlineKeyboardButton(opt['label'], callback_data=f'@OPTION_{opt['value']}') for opt in opts]
+                        for opts in [
+                            [{'label': 'Real Account' + (' ✅' if user['config']['account#type'] == 1 else ''),
+                              'value': '@real'},
+                             {'label': 'Practice Account' + (' ✅' if user['config']['account#type'] == 2 else ''),
+                              'value': '@practice'}, ]
+                        ]]
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await query.message.reply_text('🙍‍♂️ Choose account type', reply_markup=reply_markup)
+        elif callback_data == 'trading#amount':
+            user['req'] = '@req_trading#amount'
+            await query.message.reply_text('Enter trading amount')
+        elif callback_data == 'strategy':
+            keyboard = [[InlineKeyboardButton(opt['label'], callback_data=f'@OPTION_{opt['value']}') for opt in opts]
+                        for opts in [
+                            [{'label': 'Fix amount', 'value': '@fix#amount'},
+                             {'label': '%over the balance', 'value': '@over#balance'}, ]
+                        ]]
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await query.message.reply_text('💎 Choose strategy', reply_markup=reply_markup)
+        elif callback_data == 'martin#gale':
+            keyboard = [[InlineKeyboardButton(opt['label'], callback_data=f'@OPTION_{opt['value']}') for opt in opts]
+                        for opts in [
+                            [{'label': 'Up to M.Gale 1' + (' ✅' if user['config']['@up2m.gale'] == 1 else ''), 'value': '@up2m.gale1'},
+                             {'label': 'Up to M.Gale 2' + (' ✅' if user['config']['@up2m.gale'] == 2 else ''), 'value': '@up2m.gale2'}, ]
+                        ]]
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await query.message.reply_text('⚖ Choose martin gale', reply_markup=reply_markup)
+        elif callback_data == '@real':
+            user['config']['account#type'] = 1
+            await query.edit_message_text('You set Account type as `Real`', parse_mode=ParseMode.MARKDOWN)
+            update_one('users', {'id': query.from_user.id}, {
+                'config': user['config'] | {'account#type': 1}
+            })
+
+        elif callback_data == '@practice':
+            user['config']['account#type'] = 2
+            await query.edit_message_text('You set Account type as `Practice`', parse_mode=ParseMode.MARKDOWN)
+            update_one('users', {'id': query.from_user.id}, {
+                'config': user['config'] | {'account#type': 2}
+            })
+        elif callback_data == '@up2m.gale1':
+            user['config']['@up2m.gale'] = 1
+            await query.edit_message_text('You set `Up to M.Gale 1`', parse_mode=ParseMode.MARKDOWN)
+            update_one('users', {'id': query.from_user.id}, {'config': user['config'] | {
+                '@up2m.gale': 1,
+            }})
+        elif callback_data == '@up2m.gale2':
+            user['config']['@up2m.gale'] = 2
+            await query.edit_message_text('You set `Up to M.Gale 2`', parse_mode=ParseMode.MARKDOWN)
+            update_one('users', {'id': query.from_user.id}, {'config': user['config'] | {
+                '@up2m.gale': 2,
+            }})
+        elif callback_data == '@fix#amount':
+            user['req'] = '@req_fix#amount'
+            await query.edit_message_text('Enter fix amount', parse_mode=ParseMode.MARKDOWN)
+
+        elif callback_data == '@over#balance':
+            user['req'] = '@req_%over#balance'
+            await query.edit_message_text('Enter % over the balance', parse_mode=ParseMode.MARKDOWN)
+
+        else:
+            pass
+        pass
 
 
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates"
+    # response = requests.get(url)
+    # data = response.json()
+    # print(data)
+
     if update.channel_post is not None:
         logger.info("chat_id = %s", update.channel_post.chat.id)
         logger.info("text = %s", update.channel_post.text)
@@ -187,24 +309,154 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                           'id': update.message.from_user.id,
                           'username': update.message.from_user.username,
                           'lang': 'English',
-                          'level': 0
+                          'level': 0,
+                          'req': None, 'config': {}, 'perm': None,
                       })
-        if user['perm'] is None:
-            await update.message.reply_text(text='😁 Start the bot using the /stat command.')
-        elif user['perm'] != 'user':
-            if is_hex(update.message.text) and verify_key(update.message.from_user, bytes.fromhex(update.message.text)):
-                user['perm'] = 'user'
-                update_one('users',
-                           {'id': user['id']},
-                           {
-                               'perm': 'user',
-                           })
-                await update.message.reply_text(text='😍 Successfully started the bot')
-            else:
-                await update.message.reply_text(text='🤨 Invalid token. Please try again. If the problem persists, '
-                                                     'please contact support.')
+        if user['req'] == '@req_token':
+            if user['perm'] is None:
+                await update.message.reply_text(text='😁 Start the bot using the /stat command.')
+            elif user['perm'] != 'user':
+                if is_hex(update.message.text) and verify_key(update.message.from_user,
+                                                              bytes.fromhex(update.message.text)):
+                    user['perm'] = 'user'
+                    update_one('users',
+                               {'id': user['id']},
+                               {
+                                   'perm': 'user',
+                               })
+                    await update.message.reply_text(text='😍 Successfully started the bot')
+                    user['req'] = None
+                else:
+                    await update.message.reply_text(text='🤨 Invalid token. Please try again. If the problem persists, '
+                                                         'please contact support.')
+        elif user['req'] == '@req_trading#amount':
+            user['config']['trading#amount'] = int(update.message.text)
+            await update.message.reply_text(text='Trading amount is set to `{}`'.format(update.message.text),
+                                            parse_mode=ParseMode.MARKDOWN)
+            update_one('users', {'id': update.message.from_user.id}, {
+                'config': user['config'] | {'trading#amount': int(update.message.text)}
+            })
+            user['req'] = None
+
+        elif user['req'] == '@req_fix#amount':
+            user['config']['fix#amount'] = int(update.message.text)
+            update_one('users', {'id': user['id']}, {'config': user['config'] | {
+                '@req_fix#amount': int(update.message.text),
+            }})
+            await update.message.reply_text(text='Fix amount is set to `{}`'.format(update.message.text),
+                                            parse_mode=ParseMode.MARKDOWN)
+            user['req'] = None
+
+        elif user['req'] == '@req_%over#balance':
+            user['config']['%over#balance'] = int(update.message.text)
+            await update.message.reply_text(text='Over % balance is set to `{}`'.format(update.message.text),
+                                            parse_mode=ParseMode.MARKDOWN)
+            update_one('users', {'id': user['id']}, {'config': user['config'] | {
+                '@req_%over#balance': int(update.message.text),
+            }})
+            user['req'] = None
+
         else:
             await update.message.reply_text(text='😊')
+
+
+async def start_with_shipping_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Sends an invoice with shipping-payment."""
+    chat_id = update.message.chat_id
+    title = "Payment Example"
+    description = "Payment Example using python-telegram-bot"
+    # select a payload just for you to recognize its the donation from your bot
+    payload = "Custom-Payload"
+    # In order to get a provider_token see https://core.telegram.org/bots/payments#getting-a-token
+    currency = "USD"
+    # price in dollars
+    price = 1
+    # price * 100 so as to include 2 decimal points
+    # check https://core.telegram.org/bots/payments#supported-currencies for more details
+    prices = [LabeledPrice("Test", price * 100)]
+
+    # optionally pass need_name=True, need_phone_number=True,
+    # need_email=True, need_shipping_address=True, is_flexible=True
+    await context.bot.send_invoice(
+        chat_id,
+        title,
+        description,
+        payload,
+        PAYMENT_PROVIDER_TOKEN,
+        currency,
+        prices,
+        need_name=True,
+        need_phone_number=True,
+        need_email=True,
+        need_shipping_address=True,
+        is_flexible=True,
+    )
+
+
+async def start_without_shipping_callback(
+        update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    user = cached(update.message.from_user.id,
+                  {
+                      'id': update.message.from_user.id,
+                      'username': update.message.from_user.username,
+                      'lang': 'English',
+                      'req': None, 'config': {}, 'perm': None,
+                  })
+
+    if 'perm' in user and user['perm'] == 'user':
+        msg = (
+            '👌 Your bot was started'
+        )
+        await update.message.reply_text(msg)
+
+    """Sends an invoice without shipping-payment."""
+    chat_id = update.message.chat_id
+    title = "Payment Example"
+    description = "Payment Example using python-telegram-bot"
+    # select a payload just for you to recognize its the donation from your bot
+    payload = "Custom-Payload"
+    # In order to get a provider_token see https://core.telegram.org/bots/payments#getting-a-token
+    currency = "USD"
+    # price in dollars
+    price = 1
+    # price * 100 so as to include 2 decimal points
+    prices = [LabeledPrice("Test", price * 100)]
+
+    # optionally pass need_name=True, need_phone_number=True,
+    # need_email=True, need_shipping_address=True, is_flexible=True
+    await context.bot.send_invoice(
+        chat_id, title, description, payload, PAYMENT_PROVIDER_TOKEN, currency, prices
+    )
+
+
+async def shipping_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Answers the ShippingQuery with ShippingOptions"""
+    query = update.shipping_query
+    # check the payload, is this from your bot?
+    if query.invoice_payload != "Custom-Payload":
+        # answer False pre_checkout_query
+        await query.answer(ok=False, error_message="Something went wrong...")
+        return
+
+    # First option has a single LabeledPrice
+    options = [ShippingOption("1", "Shipping Option A", [LabeledPrice("A", 100)])]
+    # second option has an array of LabeledPrice objects
+    price_list = [LabeledPrice("B1", 150), LabeledPrice("B2", 200)]
+    options.append(ShippingOption("2", "Shipping Option B", price_list))
+    await query.answer(ok=True, shipping_options=options)
+
+
+# after (optional) shipping, it's the pre-checkout
+async def precheckout_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Answers the PreQecheckoutQuery"""
+    query = update.pre_checkout_query
+    # check the payload, is this from your bot?
+    if query.invoice_payload != "Custom-Payload":
+        # answer False pre_checkout_query
+        await query.answer(ok=False, error_message="Something went wrong...")
+    else:
+        await query.answer(ok=True)
 
 
 # finally, after contacting the payment provider...
@@ -215,6 +467,7 @@ async def successful_payment_callback(update: Update, context: ContextTypes.DEFA
         'id': update.message.from_user.id,
         'username': update.message.from_user.username,
         'lang': 'English',
+        'req': None, 'config': {}, 'perm': None
     })
     token = generate_key(update.message.from_user)
     user['token'] = token
@@ -226,7 +479,8 @@ async def successful_payment_callback(update: Update, context: ContextTypes.DEFA
                    'perm': 'guest',
                    'token': token
                })
-    await update.message.reply_text(f"Thank you for your payment!\n")
+    await update.message.reply_text(f"Thank you for your payment!\nTOKEN: `{token}`\nEnter TOKEN to start the bot",
+                                    parse_mode=ParseMode.MARKDOWN)
 
 
 def extract_status_change(chat_member_update: ChatMemberUpdated) -> Optional[Tuple[bool, bool]]:
@@ -278,20 +532,23 @@ async def greet_chat_members(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 def main() -> None:
+    init_cache()
+
     """Start the bot."""
     application = Application.builder().token(BOT_TOKEN).build()
 
     application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(CommandHandler("config", config_command))
     application.add_handler(CommandHandler("help", help_command))
     # Add command handler to start the payment invoice
-    application.add_handler(CommandHandler("membership", payment.start_with_shipping_callback))
-    application.add_handler(CommandHandler("noshipping", payment.start_without_shipping_callback))
+    application.add_handler(CommandHandler("noshipping", start_with_shipping_callback))
+    application.add_handler(CommandHandler("membership", start_without_shipping_callback))
 
     # Optional handler if your product requires shipping
-    application.add_handler(ShippingQueryHandler(payment.shipping_callback))
+    application.add_handler(ShippingQueryHandler(shipping_callback))
 
     # Pre-checkout handler to final check
-    application.add_handler(PreCheckoutQueryHandler(payment.precheckout_callback))
+    application.add_handler(PreCheckoutQueryHandler(precheckout_callback))
 
     # Success! Notify your user!
     application.add_handler(
