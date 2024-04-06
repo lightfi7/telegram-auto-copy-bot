@@ -219,9 +219,9 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         if callback_data == 'account#type':
             keyboard = [[InlineKeyboardButton(opt['label'], callback_data=f'@OPTION_{opt['value']}') for opt in opts]
                         for opts in [
-                            [{'label': 'Real Account' + (' ✅' if user['config']['account#type'] == 1 else ''),
+                            [{'label': 'Real Account' + (' ✅' if 'config' in user['config'] and user['config']['account#type'] == 1 else ''),
                               'value': '@real'},
-                             {'label': 'Practice Account' + (' ✅' if user['config']['account#type'] == 2 else ''),
+                             {'label': 'Practice Account' + (' ✅' if 'config' in user['config'] and user['config']['account#type'] == 2 else ''),
                               'value': '@practice'}, ]
                         ]]
 
@@ -244,8 +244,8 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         elif callback_data == 'martin#gale':
             keyboard = [[InlineKeyboardButton(opt['label'], callback_data=f'@OPTION_{opt['value']}') for opt in opts]
                         for opts in [
-                            [{'label': 'Up to M.Gale 1' + (' ✅' if user['config']['@up2m.gale'] == 1 else ''), 'value': '@up2m.gale1'},
-                             {'label': 'Up to M.Gale 2' + (' ✅' if user['config']['@up2m.gale'] == 2 else ''), 'value': '@up2m.gale2'}, ]
+                            [{'label': 'Up to M.Gale 1' + (' ✅' if 'config' in user['config'] and user['config']['@up2m.gale'] == 1 else ''), 'value': '@up2m.gale1'},
+                             {'label': 'Up to M.Gale 2' + (' ✅' if 'config' in user['config'] and user['config']['@up2m.gale'] == 2 else ''), 'value': '@up2m.gale2'}, ]
                         ]]
 
             reply_markup = InlineKeyboardMarkup(keyboard)
