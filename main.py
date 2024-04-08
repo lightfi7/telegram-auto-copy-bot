@@ -388,6 +388,17 @@ async def start_without_shipping_callback(
         await update.message.reply_text(msg)
         return
 
+    token = generate_key(update.message.from_user)
+    user['token'] = token
+    user['perm'] = 'guest'
+    print(token)
+    update_one('users',
+               {'id': user['id']},
+               {
+                   'perm': 'guest',
+                   'token': token
+               })
+
     msg = (
         '🙂 You can upgrade membership by clicking below button'
     )
@@ -413,17 +424,12 @@ async def successful_payment_callback(update: Update, context: ContextTypes.DEFA
         'lang': 'English',
         'req': None, 'config': {}, 'perm': None
     })
-    token = generate_key(update.message.from_user)
-    user['token'] = token
-    user['perm'] = 'guest'
-    print(token)
-    update_one('users',
-               {'id': user['id']},
-               {
-                   'perm': 'guest',
-                   'token': token
-               })
-    await update.message.reply_text(f"Thank you for your payment!\nTOKEN: `{token}`\nEnter TOKEN to start the bot",
+
+    if 'token' not in user:
+        await update.message.reply_text(f'Try again to upgrade /membership')
+        return
+
+    await update.message.reply_text(f"Thank you for your payment!\nTOKEN: `{user['token']}`\nEnter TOKEN to start the bot",
                                     parse_mode=ParseMode.MARKDOWN)
 
 
