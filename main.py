@@ -1,14 +1,12 @@
-import os
 import logging
-import pymongo
+import os
 from typing import Optional, Tuple
 
-import requests
+import pymongo
 from Crypto import Random
 from Crypto.Cipher import AES
 from dotenv import load_dotenv
-from telegram import ChatMember, ChatMemberUpdated, Update, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice, \
-    ShippingOption
+from telegram import ChatMember, ChatMemberUpdated, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import (
     Application,
@@ -16,7 +14,7 @@ from telegram.ext import (
     CommandHandler,
     ContextTypes,
     MessageHandler,
-    filters, CallbackContext, CallbackQueryHandler, ShippingQueryHandler, PreCheckoutQueryHandler, )
+    filters, CallbackContext, CallbackQueryHandler, )
 
 load_dotenv()
 
@@ -372,39 +370,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             await update.message.reply_text(text='😊')
 
 
-async def start_with_shipping_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Sends an invoice with shipping-payment."""
-    chat_id = update.message.chat_id
-    title = "Payment Example"
-    description = "Payment Example using python-telegram-bot"
-    # select a payload just for you to recognize its the donation from your bot
-    payload = "Custom-Payload"
-    # In order to get a provider_token see https://core.telegram.org/bots/payments#getting-a-token
-    currency = "USD"
-    # price in dollars
-    price = 1
-    # price * 100 so as to include 2 decimal points
-    # check https://core.telegram.org/bots/payments#supported-currencies for more details
-    prices = [LabeledPrice("Test", price * 100)]
-
-    # optionally pass need_name=True, need_phone_number=True,
-    # need_email=True, need_shipping_address=True, is_flexible=True
-    await context.bot.send_invoice(
-        chat_id,
-        title,
-        description,
-        payload,
-        PAYMENT_PROVIDER_TOKEN,
-        currency,
-        prices,
-        need_name=True,
-        need_phone_number=True,
-        need_email=True,
-        need_shipping_address=True,
-        is_flexible=True,
-    )
-
-
 async def start_without_shipping_callback(
         update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -421,55 +386,22 @@ async def start_without_shipping_callback(
             '👌 Your bot was started'
         )
         await update.message.reply_text(msg)
-
-    """Sends an invoice without shipping-payment."""
-    chat_id = update.message.chat_id
-    title = "Payment Example"
-    description = "Payment Example using python-telegram-bot"
-    # select a payload just for you to recognize its the donation from your bot
-    payload = "Custom-Payload"
-    # In order to get a provider_token see https://core.telegram.org/bots/payments#getting-a-token
-    currency = "USD"
-    # price in dollars
-    price = 1
-    # price * 100 so as to include 2 decimal points
-    prices = [LabeledPrice("Test", price * 100)]
-
-    # optionally pass need_name=True, need_phone_number=True,
-    # need_email=True, need_shipping_address=True, is_flexible=True
-    await context.bot.send_invoice(
-        chat_id, title, description, payload, PAYMENT_PROVIDER_TOKEN, currency, prices
-    )
-
-
-async def shipping_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Answers the ShippingQuery with ShippingOptions"""
-    query = update.shipping_query
-    # check the payload, is this from your bot?
-    if query.invoice_payload != "Custom-Payload":
-        # answer False pre_checkout_query
-        await query.answer(ok=False, error_message="Something went wrong...")
         return
 
-    # First option has a single LabeledPrice
-    options = [ShippingOption("1", "Shipping Option A", [LabeledPrice("A", 100)])]
-    # second option has an array of LabeledPrice objects
-    price_list = [LabeledPrice("B1", 150), LabeledPrice("B2", 200)]
-    options.append(ShippingOption("2", "Shipping Option B", price_list))
-    await query.answer(ok=True, shipping_options=options)
+    msg = (
+        '🙂 You can upgrade membership by clicking below button'
+    )
 
+    keyboard = [
+        [InlineKeyboardButton('🔥 Monthly', callback_data=f'@LINK_https://pay.kiwify.com.br/CAUz5sz?uid={user['token']}',
+                              url=f'https://pay.kiwify.com.br/CAUz5sz?uid={user['token']}'),
+         InlineKeyboardButton('🔥 Annual', callback_data=f'@LINK_https://pay.kiwify.com.br/oJddJmu?uid={user['token']}',
+                              url=f'https://pay.kiwify.com.br/oJddJmu?uid={user['token']}')]
+    ]
 
-# after (optional) shipping, it's the pre-checkout
-async def precheckout_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Answers the PreQecheckoutQuery"""
-    query = update.pre_checkout_query
-    # check the payload, is this from your bot?
-    if query.invoice_payload != "Custom-Payload":
-        # answer False pre_checkout_query
-        await query.answer(ok=False, error_message="Something went wrong...")
-    else:
-        await query.answer(ok=True)
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
+    await update.message.reply_text(msg, quote=True, reply_markup=reply_markup)
 
 # finally, after contacting the payment provider...
 async def successful_payment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -553,14 +485,7 @@ def main() -> None:
     application.add_handler(CommandHandler("config", config_command))
     application.add_handler(CommandHandler("help", help_command))
     # Add command handler to start the payment invoice
-    application.add_handler(CommandHandler("noshipping", start_with_shipping_callback))
     application.add_handler(CommandHandler("membership", start_without_shipping_callback))
-
-    # Optional handler if your product requires shipping
-    application.add_handler(ShippingQueryHandler(shipping_callback))
-
-    # Pre-checkout handler to final check
-    application.add_handler(PreCheckoutQueryHandler(precheckout_callback))
 
     # Success! Notify your user!
     application.add_handler(
