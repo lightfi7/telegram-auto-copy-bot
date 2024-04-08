@@ -219,9 +219,11 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         if callback_data == 'account#type':
             keyboard = [[InlineKeyboardButton(opt['label'], callback_data=f'@OPTION_{opt['value']}') for opt in opts]
                         for opts in [
-                            [{'label': 'Real Account' + (' ✅' if 'config' in user['config'] and user['config']['account#type'] == 1 else ''),
+                            [{'label': 'Real Account' + (
+                                ' ✅' if 'config' in user['config'] and user['config']['account#type'] == 1 else ''),
                               'value': '@real'},
-                             {'label': 'Practice Account' + (' ✅' if 'config' in user['config'] and user['config']['account#type'] == 2 else ''),
+                             {'label': 'Practice Account' + (
+                                 ' ✅' if 'config' in user['config'] and user['config']['account#type'] == 2 else ''),
                               'value': '@practice'}, ]
                         ]]
 
@@ -244,8 +246,12 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         elif callback_data == 'martin#gale':
             keyboard = [[InlineKeyboardButton(opt['label'], callback_data=f'@OPTION_{opt['value']}') for opt in opts]
                         for opts in [
-                            [{'label': 'Up to M.Gale 1' + (' ✅' if 'config' in user['config'] and user['config']['@up2m.gale'] == 1 else ''), 'value': '@up2m.gale1'},
-                             {'label': 'Up to M.Gale 2' + (' ✅' if 'config' in user['config'] and user['config']['@up2m.gale'] == 2 else ''), 'value': '@up2m.gale2'}, ]
+                            [{'label': 'Up to M.Gale 1' + (
+                                ' ✅' if 'config' in user['config'] and user['config']['@up2m.gale'] == 1 else ''),
+                              'value': '@up2m.gale1'},
+                             {'label': 'Up to M.Gale 2' + (
+                                 ' ✅' if 'config' in user['config'] and user['config']['@up2m.gale'] == 2 else ''),
+                              'value': '@up2m.gale2'}, ]
                         ]]
 
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -301,8 +307,14 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         if update.channel_post.chat.id == int(SOURCE_CHANNEL_ID):
             for user_id in cache.keys():
                 if cache[user_id]['perm'] != 'guest':
+                    keyboard = [
+                        [InlineKeyboardButton('🔥 TRADING', callback_data=f'@LINK_https://trade.exnova.com/en/login',
+                                              url=f'https://trade.exnova.com/en/login')]
+                    ]
+
+                    reply_markup = InlineKeyboardMarkup(keyboard)
                     await context.bot.copy_message(chat_id=user_id, from_chat_id=update.channel_post.chat.id,
-                                                   message_id=update.channel_post.message_id)
+                                                   message_id=update.channel_post.message_id, reply_markup=reply_markup)
     elif update.message is not None:
         user = cached(update.message.from_user.id,
                       {
