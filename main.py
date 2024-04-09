@@ -1,8 +1,8 @@
 import logging
 import os
 from typing import Optional, Tuple
-
 import pymongo
+import requests
 from Crypto import Random
 from Crypto.Cipher import AES
 from dotenv import load_dotenv
@@ -110,6 +110,8 @@ def init_cache():
         _user = {}
         for _key in user:
             _user[_key] = user[_key]
+        _user['req'] = '@None'
+        _user['lang'] = 'English'
         cache[user['id']] = _user
 
 
@@ -139,7 +141,7 @@ async def start_command(update: Update, context: CallbackContext) -> None:
                       'id': update.message.from_user.id,
                       'username': update.message.from_user.username,
                       'lang': 'English',
-                      'req': None, 'config': {}, 'perm': None
+                      'req': '@None', 'config': {}, 'perm': None
                   })
 
     print(user)
@@ -185,7 +187,8 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
                       'id': query.from_user.id,
                       'username': query.from_user.username,
                       'lang': 'English',
-                      'config': {}
+                      'level': 0,
+                      'req': '@None', 'config': {}, 'perm': None,
                   })
 
     if callback_type == '@LANG':
@@ -294,11 +297,6 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
 
 
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates"
-    # response = requests.get(url)
-    # data = response.json()
-    # print(data)
-
     if update.channel_post is not None:
         logger.info("chat_id = %s", update.channel_post.chat.id)
         logger.info("text = %s", update.channel_post.text)
@@ -306,7 +304,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             for user_id in cache.keys():
                 if cache[user_id]['perm'] != 'guest':
                     keyboard = [
-                        [InlineKeyboardButton('🔥 TRADING', callback_data=f'@LINK_https://trade.exnova.com/en/login',
+                        [InlineKeyboardButton('⚡ TRADING', callback_data=f'@LINK_https://trade.exnova.com/en/login',
                                               url=f'https://trade.exnova.com/en/login')]
                     ]
 
@@ -320,7 +318,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                           'username': update.message.from_user.username,
                           'lang': 'English',
                           'level': 0,
-                          'req': None, 'config': {}, 'perm': None,
+                          'req': '@None', 'config': {}, 'perm': None,
                       })
         if user['req'] == '@req_token':
             if user['perm'] is None:
@@ -370,7 +368,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             await update.message.reply_text(text='😊')
 
 
-async def start_without_shipping_callback(
+async def membership_command(
         update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     user = cached(update.message.from_user.id,
@@ -378,7 +376,7 @@ async def start_without_shipping_callback(
                       'id': update.message.from_user.id,
                       'username': update.message.from_user.username,
                       'lang': 'English',
-                      'req': None, 'config': {}, 'perm': None,
+                      'req': '@None', 'config': {}, 'perm': None,
                   })
 
     if 'perm' in user and user['perm'] == 'user':
@@ -404,15 +402,16 @@ async def start_without_shipping_callback(
     )
 
     keyboard = [
-        [InlineKeyboardButton('🔥 Monthly', callback_data=f'@LINK_https://pay.kiwify.com.br/CAUz5sz?uid={user['token']}',
-                              url=f'https://pay.kiwify.com.br/CAUz5sz?uid={user['token']}'),
+        [InlineKeyboardButton('💧 Monthly', callback_data=f'@LINK_https://pay.kiwify.com.br/CAUz5sz?uid={user['token']}',
+                              url=f'https://pay.kiwify.com.br/CAUz5sz?uid={user['token']}&chat_id={update.message.chat.id}'),
          InlineKeyboardButton('🔥 Annual', callback_data=f'@LINK_https://pay.kiwify.com.br/oJddJmu?uid={user['token']}',
-                              url=f'https://pay.kiwify.com.br/oJddJmu?uid={user['token']}')]
+                              url=f'https://pay.kiwify.com.br/oJddJmu?uid={user['token']}&chat_id={update.message.chat.id}')]
     ]
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(msg, quote=True, reply_markup=reply_markup)
+
 
 # finally, after contacting the payment provider...
 async def successful_payment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -422,63 +421,16 @@ async def successful_payment_callback(update: Update, context: ContextTypes.DEFA
         'id': update.message.from_user.id,
         'username': update.message.from_user.username,
         'lang': 'English',
-        'req': None, 'config': {}, 'perm': None
+        'req': '@None', 'config': {}, 'perm': None,
     })
 
     if 'token' not in user:
         await update.message.reply_text(f'Try again to upgrade /membership')
         return
 
-    await update.message.reply_text(f"Thank you for your payment!\nTOKEN: `{user['token']}`\nEnter TOKEN to start the bot",
-                                    parse_mode=ParseMode.MARKDOWN)
-
-
-def extract_status_change(chat_member_update: ChatMemberUpdated) -> Optional[Tuple[bool, bool]]:
-    """Takes a ChatMemberUpdated instance and extracts whether the 'old_chat_member' was a member
-    of the chat and whether the 'new_chat_member' is a member of the chat. Returns None, if
-    the status didn't change.
-    """
-    status_change = chat_member_update.difference().get("status")
-    old_is_member, new_is_member = chat_member_update.difference().get("is_member", (None, None))
-
-    if status_change is None:
-        return None
-
-    old_status, new_status = status_change
-    was_member = old_status in [
-        ChatMember.MEMBER,
-        ChatMember.OWNER,
-        ChatMember.ADMINISTRATOR,
-    ] or (old_status == ChatMember.RESTRICTED and old_is_member is True)
-    is_member = new_status in [
-        ChatMember.MEMBER,
-        ChatMember.OWNER,
-        ChatMember.ADMINISTRATOR,
-    ] or (new_status == ChatMember.RESTRICTED and new_is_member is True)
-
-    return was_member, is_member
-
-
-async def greet_chat_members(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Greets new users in chats and announces when someone leaves"""
-    result = extract_status_change(update.chat_member)
-    if result is None:
-        return
-
-    was_member, is_member = result
-    cause_name = update.chat_member.from_user.mention_html()
-    member_name = update.chat_member.new_chat_member.user.mention_html()
-
-    if not was_member and is_member:
-        await update.effective_chat.send_message(
-            f"{member_name} was added by {cause_name}. Welcome!",
-            parse_mode=ParseMode.HTML,
-        )
-    elif was_member and not is_member:
-        await update.effective_chat.send_message(
-            f"{member_name} is no longer with us. Thanks a lot, {cause_name} ...",
-            parse_mode=ParseMode.HTML,
-        )
+    await update.message.reply_text(
+        f"Thank you for your payment!\nTOKEN: `{user['token']}`\nEnter TOKEN to start the bot",
+        parse_mode=ParseMode.MARKDOWN)
 
 
 def main() -> None:
@@ -491,19 +443,14 @@ def main() -> None:
     application.add_handler(CommandHandler("config", config_command))
     application.add_handler(CommandHandler("help", help_command))
     # Add command handler to start the payment invoice
-    application.add_handler(CommandHandler("membership", start_without_shipping_callback))
-
-    # Success! Notify your user!
-    application.add_handler(
-        MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_callback)
-    )
+    application.add_handler(CommandHandler("membership", membership_command))
 
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
-    application.add_handler(ChatMemberHandler(greet_chat_members, ChatMemberHandler.CHAT_MEMBER))
     application.add_handler(CallbackQueryHandler(callback_query_handler))
 
     application.run_polling(allowed_updates=Update.ALL_TYPES)
+    # application.run_webhook(listen="127.0.0.1", port=8000, webhook_url=f'https://api.telegram.org/bot{BOT_TOKEN}/')
 
 
 if __name__ == "__main__":
