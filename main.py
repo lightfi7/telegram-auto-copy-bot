@@ -171,7 +171,7 @@ async def config_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(f'🔥 @Support team\n`ry.mc.le.92@gmail.com`', parse_mode=ParseMode.MARKDOWN)
+    await update.message.reply_text(f'🔥 @Support team\n`https://t.me/andrewzdev`', parse_mode=ParseMode.MARKDOWN)
 
 
 async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
